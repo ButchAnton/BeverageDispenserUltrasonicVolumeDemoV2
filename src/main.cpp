@@ -24,6 +24,12 @@
 
 #define AP_SSID "SAP_SensorAP"
 
+// Initialize the WiFiManager.  This library provides a captive portal for configuring
+// Wi-Fi connective on the device, as well as on-device configuration and storage of
+// random data, like endpoints, passwords, etc.
+
+WiFiManager wifiManager;
+
 // File system
 
 #include <FS.h>
@@ -52,6 +58,8 @@ void saveConfigCallback() {
 
 #include <Wire.h>
 #include "SSD1306.h"
+#include "OLEDDisplayUi.h"
+#include "images.h"
 
 // Absolutely disgusting macros to allow me to programmitically
 // create a font name while at the same time being able to
@@ -74,6 +82,7 @@ void saveConfigCallback() {
 #endif // 0
 
 SSD1306  display(0x3c, 4, 15);
+OLEDDisplayUi ui(&display);
 
 int fontHeight = -1;
 #define LINE_SPACING(X) (fontHeight * X)
@@ -110,6 +119,53 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
   }
 }
 
+void drawSetupWiFiFrame(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+
+  display->drawString(0, LINE_SPACING(0), "Connect to SAP_SensorAP");
+  display->drawString(0, LINE_SPACING(1), "with your phone or");
+  display->drawString(0, LINE_SPACING(2), "laptop to configure");
+  display->drawString(0, LINE_SPACING(3), "Wi-Fi and parameters.");
+  display->display();
+}
+
+void drawWiFiClientInformationFrame(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+  display->drawString(0, LINE_SPACING(0), "Connected to Wi-Fi network:");
+  display->drawStringMaxWidth(0, LINE_SPACING(1), 128, WiFi.SSID());
+  String ipString = "IP: " + wifiManager.toStringIp(WiFi.localIP());
+  display->drawStringMaxWidth(0, LINE_SPACING(2), 128, ipString);
+}
+
+void drawIotsEndpointInformationFrame(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+  String iotsString = "iots: " + String(iots_endpoint_value);
+  display->drawStringMaxWidth(0, LINE_SPACING(0), 128, iotsString);
+}
+
+void drawOauthEndpointInformationFrame(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+  String oauthString = "oauth: " + String(oauth_endpoint_value);
+  display->drawStringMaxWidth(0, LINE_SPACING(0), 128, oauthString);
+}
+
+void drawSensorIDInformationFrame(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+  String sensorIDString = "sensorID: " + String(sensor_id_value);
+  display->drawStringMaxWidth(0, LINE_SPACING(0), 128, sensorIDString);
+}
+
+float fill_percentage = -99.9999999;
+String postReturnValue = "202";
+
+void drawSensorInformationFrame(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+  char fill_percentage_string[128];
+  String sensorString = "Fill %: " + String(dtostrf(fill_percentage, 4, 2, fill_percentage_string)) + "%";
+  display->drawStringMaxWidth(0, LINE_SPACING(0), 128, sensorString);
+  String postString = "POST returns: " + postReturnValue;
+  display->drawStringMaxWidth(0, LINE_SPACING(1), 128, postString);
+}
+
+#define NUMBER_OF_SETUP_UI_FRAMES 1
+#define NUMBER_OF_SENSOR_INFO_UI_FRAMES 5
+FrameCallback setupUIFrames[NUMBER_OF_SETUP_UI_FRAMES] = {drawSetupWiFiFrame};
+FrameCallback sensorUIFrames[NUMBER_OF_SENSOR_INFO_UI_FRAMES] = {drawWiFiClientInformationFrame, drawIotsEndpointInformationFrame, drawOauthEndpointInformationFrame, drawSensorIDInformationFrame, drawSensorInformationFrame};
+
 void setup() {
     Serial.begin(115200);
     delay(5000);
@@ -120,7 +176,7 @@ void setup() {
     // Uncomment the line below to format the file system.  Best way to remove
     // the configuration file(s) for testing.
 
-    // Serial.println(F("Formatting the SPIFFS"));
+    // Serial.println(F("Formatting the SPIFFS."));
     // SPIFFS.format();
 
     // Mount the filesystem.
@@ -212,22 +268,48 @@ void setup() {
       Serial.println(F("setup: Failed to mount SPIFFS!!!!!!"));
     }
 
-    // Set up the display.
+    // Set up the display UI.
 
-    display.init();
-    display.clear();
+    // The ESP is capable of rendering 60fps in 80Mhz mode
+  	// but that won't give you much time for anything else
+  	// run it in 160Mhz mode or just set it to 30 fps.
+
+    ui.setTargetFPS(60);
+
+    // Customize the active and inactive symbol.
+
+    ui.setActiveSymbol(activeSymbol);
+    ui.setInactiveSymbol(inactiveSymbol);
+
+    // You can change this to
+    // TOP, LEFT, BOTTOM, RIGHT.
+
+    ui.setIndicatorPosition(BOTTOM);
+
+    // Defines where the first frame is located in the bar.
+
+    ui.setIndicatorDirection(LEFT_RIGHT);
+
+    // You can change the transition that is used
+    // SLIDE_LEFT, SLIDE_RIGHT, SLIDE_UP, SLIDE_DOWN.
+
+    ui.setFrameAnimation(SLIDE_LEFT);
+
+    // Add the Wi-Fi configuration frame and display it.
+
+    ui.setFrames(setupUIFrames, NUMBER_OF_SETUP_UI_FRAMES);
+    ui.init();
 
     // Change the screen orientation and choose a small, good looking font.
 
     display.flipScreenVertically();
     display.setFont(ArialMT_Plain_10);
-    fontHeight = ArialMT_Plain_10[1] - 4; // Tighten things up a bit.
+    // fontHeight = ArialMT_Plain_10[1] - 4; // Tighten things up a bit.
+    fontHeight = ArialMT_Plain_10[1]; // Tighten things up a bit.
 
-    // Initialize the WiFiManager.  This library provides a captive portal for configuring
-    // Wi-Fi connective on the device, as well as on-device configuration and storage of
-    // random data, like endpoints, passwords, etc.
+    // Draw to the display.
 
-    WiFiManager wifiManager;
+    ui.update();
 
     // Uncomment this line to erase saved settings.  Note that it does not get rid of
     // previously stored SSIDs/passwords.  See the comment below.
@@ -249,19 +331,12 @@ void setup() {
     wifiManager.addParameter(&custom_oauth_endpoint_value);
     wifiManager.addParameter(&custom_sensor_id_value);
 
-
     // Retrieve any stored SSIDs/passwords and try to connect to them.
     // If all else fails, start a Wi-Fi network with the SSID given.
     // Users should connect to this SSID and (perhaps, if their device does not
     // automagically direct them to the captive portal) use a browser to connect
     // to a website.  If this fails, and the IP address of the AP wasn't specified
     // above, they should try to browse to 192.168.4.1.
-
-    display.drawString(0, LINE_SPACING(0), "Connect to SAP_SensorAP");
-    display.drawString(0, LINE_SPACING(1), "with your phone or");
-    display.drawString(0, LINE_SPACING(2), "laptop to configure");
-    display.drawString(0, LINE_SPACING(3), "Wi-Fi and parameters.");
-    display.display();
 
     wifiManager.autoConnect(AP_SSID);
 
@@ -275,10 +350,7 @@ void setup() {
 
     Serial.printf("setup: Connected to SSID %s, IP %s\n", WiFi.SSID().c_str(), wifiManager.toStringIp(WiFi.localIP()).c_str());
 
-    display.clear();
-    display.drawString(0, LINE_SPACING(0), "Connected to Wi-Fi network!");
-    display.drawString(0, LINE_SPACING(1), WiFi.SSID());
-    display.drawString(0, LINE_SPACING(2), wifiManager.toStringIp(WiFi.localIP()));
+    // Now that we're connected, display the new Wi-Fi and configuration information.
 
     // Get the custom parameters from the configuration page.
 
@@ -325,18 +397,20 @@ void setup() {
     WiFi.disconnect(true);
 #endif // CLEAR_SAVED_WIFI_SETTINGS
 
-    // Display the new custom parameters.  Just guessing at the offsets for
-    // the keys.
+  // Set up the new display.  Updates will be done in the main loop.
 
-    display.drawString(0, LINE_SPACING(3), "iots: ");
-    display.drawString(20, LINE_SPACING(3), iots_endpoint_value);
-    display.drawString(0, LINE_SPACING(4), "oauth: ");
-    display.drawString(30, LINE_SPACING(4), oauth_endpoint_value);
-    display.drawString(0, LINE_SPACING(5), "sensor: ");
-    display.drawString(35, LINE_SPACING(5), sensor_id_value);
-    display.display();
-
+  ui.setFrames(sensorUIFrames, NUMBER_OF_SENSOR_INFO_UI_FRAMES);
+  ui.init();
+  display.flipScreenVertically();
 }
 
 void loop() {
+  int remainingTimeBudget = ui.update();
+
+  if (remainingTimeBudget > 0) {
+    // You can do some work here
+    // Don't do stuff if you are below your
+    // time budget.
+    delay(remainingTimeBudget);
+  }
 }
