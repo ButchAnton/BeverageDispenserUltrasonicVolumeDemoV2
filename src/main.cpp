@@ -497,6 +497,7 @@ void resetWiFiAndBoard() {
   debug_print("Clearing stored Wi-Fi information.\n");
   WiFi.disconnect(true);
   writeDefaultConfigFile(true);
+  debug_print("Restarting board.\n");
   ESP.restart();
 }
 
