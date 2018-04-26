@@ -1,5 +1,28 @@
+// NOTE!!!!!!!
+// You must increase the stack size for this program.
+// If you are using PlatformIO, the stack size is defined in
+// ~/.platformio/packages/framework-arduinoespressif32/cores/esp32/main.cpp
+// The default value is 8192.
+// For this program, I use 16384.
+
 // #define CLEAR_SAVED_WIFI_SETTINGS 1
-#define WRITE_SAMPLE_FILE 1
+
+// NOTE!!!!!!!
+// Before you ship the board (or, even better, when you first flash the board), make sure
+// that you uncomment the define below so that the SPIFFS gets formatted and a default
+// config file gets written.
+
+// #define WRITE_SAMPLE_FILE 1
+
+// Debug printing
+
+#define DEBUG 1
+#define debug_print(fmt, ...) \
+  do { if (DEBUG) Serial.printf("%s:%d:%s(): " fmt, __FILE__, \
+    __LINE__, __func__, ##__VA_ARGS__); } while (0)
+
+#define debug_simple_print(fmt, ...) \
+  do { if (DEBUG) Serial.printf(fmt, ##__VA_ARGS__); } while (0)
 
 #include <Arduino.h>
 
@@ -46,10 +69,17 @@ int sensorPostReturnValue = 202;
 
 WiFiManager wifiManager;
 
+// Allow the Prg button to clear Wi-Fi settings.
+
+#define PRG_PIN 0
+// If this is true, the prg button has been pushed and we need to restore the board
+// to its default state.
+bool restoreBoardToDefault = false;
+
 // Ultrasonic distance sensor
 
-const int triggerPin = 18;
-const int echoPin = 19;
+#define TRIGGER_PIN 21
+#define ECHO_PIN 22
 
 const double speedOfSound = 2.93866995797702; // mm per microsecond
 const double heightOfColumn = 573.388650;  // height of the beverage dispenser in mm
@@ -64,12 +94,18 @@ int forcePostCount = 1;
 #include <SPIFFS.h>
 
 #define CONFIG_FILE "/config.json"
-const char *iots_endpoint_key = "iots_endpoint";
 #define IOTS_ENDPOINT_SIZE 256
-char iots_endpoint_value[IOTS_ENDPOINT_SIZE] = "https://sap-connected-goods-ingestion-api-qa.cfapps.eu10.hana.ondemand.com/ConnectedGoods/v1/DeviceData";
-const char *oauth_endpoint_key = "oauth_endpoint";
+const char *iots_endpoint_key = "iots_endpoint";
+char iots_endpoint_value[IOTS_ENDPOINT_SIZE] = "https://sap-connected-goods-ingestion-api-demo-cdemo.cfapps.eu10.hana.ondemand.com/ConnectedGoods/v1/DeviceData";
 #define OAUTH_ENDPOINT_SIZE 256
-char oauth_endpoint_value[OAUTH_ENDPOINT_SIZE] = "https://cng-qa1.authentication.eu10.hana.ondemand.com/oauth/token";
+const char *oauth_endpoint_key = "oauth_endpoint";
+char oauth_endpoint_value[OAUTH_ENDPOINT_SIZE] = "https://cng-leonardoc.authentication.eu10.hana.ondemand.com/oauth/token";
+#define OAUTH_CLIENT_ID_SIZE 128
+const char *oauth_client_id_key = "oauth_client_id";
+char oauth_client_id_value[OAUTH_CLIENT_ID_SIZE] = "sb-sap-connected-goods-cust-demo!t5";
+#define OAUTH_CLIENT_SECRET_SIZE 128
+const char *oauth_client_secret_key = "oauth_client_secret";
+char oauth_client_secret_value[OAUTH_CLIENT_SECRET_SIZE] = "bc%2B1Zrm4%2Bc%2FZUuD0TXUUTxP5F0k%3D";
 #define SENSOR_ID_SIZE 128
 const char *sensor_id_key = "sensor_id";
 char sensor_id_value[SENSOR_ID_SIZE] = "SENSOR_1";
@@ -79,37 +115,87 @@ bool needToSaveConfiguration = false;
 
 void saveConfigCallback() {
   needToSaveConfiguration = true;
-  Serial.printf("%s: callback called: needToSaveConfiguration set to true.", __func__);
+  debug_print("callback called: needToSaveConfiguration set to true.");
 }
 
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
-  Serial.printf("%s: Listing directory: %s\n", __func__, dirname);
+  char *filename;
+
+  debug_print("Listing directory: %s\n", dirname);
 
   File root = fs.open(dirname);
   if (!root) {
-    Serial.printf("%s: Failed to open directory.", __func__);
+    debug_print("Failed to open directory.");
     return;
   }
   if (!root.isDirectory()) {
-    Serial.printf("%s: %s is not a directory.\n", __func__, dirname);
+    debug_print("%s is not a directory.\n", dirname);
     return;
   }
 
   File file = root.openNextFile();
   while (file) {
     if (file.isDirectory()) {
-      Serial.print(F("  DIR : "));
-      Serial.println(file.name());
+      debug_simple_print("  DIR : ");
+      filename = (char *)file.name();
+      debug_simple_print("%s\n", filename);
       if (levels) {
-        listDir(fs, file.name(), levels - 1);
+        listDir(fs, filename, levels - 1);
       }
     } else {
-      Serial.print(F("  FILE: "));
-      Serial.print(file.name());
-      Serial.print(F("  SIZE: "));
-      Serial.println(file.size());
+      debug_simple_print("  FILE: ");
+      // Serial.print(file.name());
+      debug_simple_print("%s", filename);
+      int filesize = file.size();
+      debug_simple_print("  SIZE: ");
+      debug_simple_print("%d\n", filesize);
     }
     file = root.openNextFile();
+  }
+}
+
+void writeDefaultConfigFile(bool shouldFormat) {
+
+  if (shouldFormat) {
+    SPIFFS.format();
+  }
+
+  if (SPIFFS.begin()) {
+
+    debug_print("Mounted the filesystem.\n");
+
+    // Write a test file.
+
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject& json = jsonBuffer.createObject();
+    json[iots_endpoint_key] = iots_endpoint_value;
+    json[oauth_endpoint_key] = oauth_endpoint_value;
+    json[oauth_client_id_key] = oauth_client_id_value;
+    json[oauth_client_secret_key] = oauth_client_secret_value;
+    json[sensor_id_key] = sensor_id_value;
+    File configFile = SPIFFS.open(CONFIG_FILE, FILE_WRITE);
+    if (!configFile) {
+      debug_print("Failed to open config file %s for writing.\n", CONFIG_FILE);
+    }
+
+#ifdef DEBUG
+    json.printTo(Serial);
+#endif // DEBUG
+    debug_simple_print("\n");
+    json.printTo(configFile);
+    configFile.close();
+
+    // Get the file size and print it.
+
+    configFile = SPIFFS.open(CONFIG_FILE, FILE_READ);
+    size_t configFileSize = configFile.size();
+    debug_print("Wrote config file.  File size is %d bytes.\n", configFileSize);
+    configFile.close();
+    debug_print("Root level directory listing:\n");
+    listDir(SPIFFS, "/", 0);
+    SPIFFS.end();
+  } else {
+    debug_print("Unable to mount the filesystem.\n");
   }
 }
 
@@ -147,7 +233,6 @@ int fontHeight = -1;
 
 // CNG server information
 
-// String dataServer = F("https://sap-connected-goods-ingestion-api-qa.cfapps.eu10.hana.ondemand.com/ConnectedGoods/v1/DeviceData");  // old one
 // String dataServer = F("https://sap-connected-goods-ingestion-api-qa.cfapps.eu10.hana.ondemand.com/ConnectedGoods/v1/DeviceData");
 // String authServer = F("https://cng-qa1.authentication.eu10.hana.ondemand.com/oauth/token");
 
@@ -196,7 +281,7 @@ char formatted_time[80];
 // Drawing functions for various informational screens.
 
 void drawSetupWiFiFrame() {
-  Serial.printf("%s: Displaying frame.\n", __func__);
+  debug_print("Displaying frame.\n");
   display.clear();
   display.drawString(0, LINE_SPACING(0), "Connect to SAP_SensorAP");
   display.drawString(0, LINE_SPACING(1), "with your phone or");
@@ -206,7 +291,7 @@ void drawSetupWiFiFrame() {
 }
 
 void drawWiFiClientInformationFrame() {
-  Serial.printf("%s: Displaying frame.\n", __func__);
+  debug_print("Displaying frame.\n");
   display.clear();
   display.drawString(0, LINE_SPACING(0), "Connected to Wi-Fi network:");
   display.drawStringMaxWidth(0, LINE_SPACING(1), 128, WiFi.SSID());
@@ -216,7 +301,7 @@ void drawWiFiClientInformationFrame() {
 }
 
 void drawIotsEndpointInformationFrame() {
-  Serial.printf("%s: Displaying frame.\n", __func__);
+  debug_print("Displaying frame.\n");
   display.clear();
   String iotsString = "iots: " + String(iots_endpoint_value);
   display.drawStringMaxWidth(0, LINE_SPACING(0), 128, iotsString);
@@ -224,15 +309,31 @@ void drawIotsEndpointInformationFrame() {
 }
 
 void drawOauthEndpointInformationFrame() {
-  Serial.printf("%s: Displaying frame.\n", __func__);
+  debug_print("Displaying frame.\n");
   display.clear();
   String oauthString = "oauth: " + String(oauth_endpoint_value);
   display.drawStringMaxWidth(0, LINE_SPACING(0), 128, oauthString);
   display.display();
 }
 
+void drawOauthClientIDInformationFrame() {
+  debug_print("Displaying frame.\n");
+  display.clear();
+  String oauthClientIDString = "oauth clientID: " + String(oauth_client_id_value);
+  display.drawStringMaxWidth(0, LINE_SPACING(0), 128, oauthClientIDString);
+  display.display();
+}
+
+void drawOauthClientSecretInformationFrame() {
+  debug_print("Displaying frame.\n");
+  display.clear();
+  String oauthSecretString = "oauth secret: " + String(oauth_client_secret_value);
+  display.drawStringMaxWidth(0, LINE_SPACING(0), 128, oauthSecretString);
+  display.display();
+}
+
 void drawSensorIDInformationFrame() {
-  Serial.printf("%s: Displaying frame.\n", __func__);
+  debug_print("Displaying frame.\n");
   display.clear();
   String sensorIDString = "sensorID: " + String(sensor_id_value);
   display.drawStringMaxWidth(0, LINE_SPACING(0), 128, sensorIDString);
@@ -240,7 +341,7 @@ void drawSensorIDInformationFrame() {
 }
 
 void drawSensorInformationFrame() {
-  Serial.printf("%s: Displaying frame.\n", __func__);
+  debug_print("Displaying frame.\n");
   display.clear();
   display.drawStringMaxWidth(0, LINE_SPACING(0), 128, formatted_time);
   char fill_percentage_string[128];
@@ -249,6 +350,56 @@ void drawSensorInformationFrame() {
   String postString = "POST returns: " + String(sensorPostReturnValue);
   display.drawStringMaxWidth(0, LINE_SPACING(2), 128, postString);
   display.display();
+}
+
+// Retrieve an OAuth token from SAP CNG for use with POST requests.
+
+void getAuthToken() {
+
+#define JSON_BUFFER_SIZE 4500
+
+  String response = "";
+  int returnCode = 0;
+  HTTPClient http;
+
+  http.begin(oauth_endpoint_value, serverCert);
+
+  http.addHeader("Accept", "application/json");
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  String request = "client_id=" + String(oauth_client_id_value) + "&client_secret=" + String(oauth_client_secret_value) + "&grant_type=client_credentials&token_format=jwt&response_type=token";
+  // debug_print("request: %s\n", request.c_str());
+
+  // debug_print("Before calling POST\n");
+  returnCode = http.POST(request);
+  // debug_print("returnCode = %d\n", returnCode);
+  // debug_print("After calling POST\n");
+
+  if (returnCode == HTTP_CODE_OK) {
+    // debug_print("Setting response\n");
+    response = http.getString();
+    // debug_print("response: %s\n", response.c_str());
+    // response = "{\"access_token\":\"abcde\"}";
+    // debug_print("allocating jsonBuffer<JSON_BUFFER_SIZE>\n");
+    StaticJsonBuffer<JSON_BUFFER_SIZE> jsonBuffer;
+    // StaticJsonBuffer<100> jsonBuffer;
+    // debug_print("calling parseObject\n");
+    JsonObject& root = jsonBuffer.parseObject(response);
+    // Test if parsing succeeds.
+    if (!root.success()) {
+      Serial.printf("parseObject() failed!\n");
+      delay(100000000);
+    }
+    // debug_print("retrieving access_token\n");
+    const char *token = root["access_token"];
+    // debug_print("token = %s\n", token);
+    // Serial.print("token: ");
+    // Serial.println(token);
+    // debug_print("Creating oauthToken\n");
+    oauthToken = "Bearer " + String(token);
+    debug_print("oauthToken = %s\n", oauthToken.c_str());
+  } else {
+    debug_print("Error getting auth token, returnCode = %d\n", returnCode);
+  }
 }
 
 // Post the level of the beverage dispenser to CNG as a percentage of full.
@@ -271,6 +422,11 @@ void postLevelPercentage(float levelPercentage) {
   strftime(formatted_time, sizeof(formatted_time), "%Y-%m-%dT%H:%M:%SZ", &time_now_struct);
   // Serial.printf("The time is %s\n", formatted_time);
 
+  // Get the current oAuth token.
+
+  getAuthToken();
+
+  // Set up the connection to the IoTS endpoint.
 
   http.begin(iots_endpoint_value, serverCert);
 
@@ -279,56 +435,19 @@ void postLevelPercentage(float levelPercentage) {
   http.addHeader("cng_devicetype", "Container");
   http.addHeader("cng_messagetype", "Container_Message_Data2");
 
+  // {"messages": [{"cng_deviceId": "Live-Container-1","timestamp":"2018-01-11T20:54:58.437Z","filllevel": 12,"expiryDate": "10/12/2022","messagetype": 700,"filltype": 1,"fragrance": "Ginger"}]}
+
   // String request = "{\"messages\":[{\"cng_deviceId\":\"" + sensorID + "\",\"timestamp\":\"" + formatted_time + "\",\"flavour\":1,\"fillLevel\":" + levelPercentage + ",\"longitude\":" + longitude + ",\"latitude\":" + latitude + ",\"temperature\":18.1}]}";
   String request = "{\"messages\":[{\"cng_deviceId\":\"" + String(sensor_id_value) + "\",\"timestamp\":\"" + formatted_time + "\",\"filllevel\":" + levelPercentage + ",\"expiryDate\":\"10/10/2022\",\"messagetype\":700,\"filltype\":1,\"fragrance\":\"Ginger\"}]}";
 
-  // log_d("Request: %s\n", request.c_str());
-  Serial.printf("%s: Request: %s\n", __func__, request.c_str());
+  debug_print("Oauth token: <BEGIN TOKEN>%s<END TOKEN>, length = %d\n", oauthToken.c_str(), oauthToken.length());
+  debug_print("Request: %s\n", request.c_str());
   sensorPostReturnValue = http.POST(request);
   if (sensorPostReturnValue == HTTP_CODE_OK || sensorPostReturnValue == HTTP_CODE_ACCEPTED) {
     response = http.getString();
-    Serial.printf("%s: Response: %s, returnCode = %d\n", __func__, response.c_str(), sensorPostReturnValue);
+    debug_print("Response: %s, returnCode = %d\n", response.c_str(), sensorPostReturnValue);
   } else {
-    Serial.printf("%s: Error posting sensor data, returnCode = %d\n", __func__, sensorPostReturnValue);
-  }
-}
-
-// Retrieve an OAuth token from SAP CNG for use with POST requests.
-
-void getAuthToken() {
-
-  String response = "";
-  int returnCode = 0;
-  HTTPClient http;
-
-  http.begin(oauth_endpoint_value, serverCert);
-
-  http.addHeader("Accept", "application/json");
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-  String request = F("client_id=sb-sap-connected-goods-qa!t5&client_secret=Eu7gZ7suJG4VRahheB2i3F2E85E=&grant_type=client_credentials&token_format=jwt&response_type=token");
-
-  // Serial.printf("Before calling POST\n");
-  returnCode = http.POST(request);
-  // Serial.printf("After calling POST\n");
-  // returnCode = HTTP_CODE_OK;
-
-  if (returnCode == HTTP_CODE_OK) {
-    // Serial.printf("Setting response\n");
-    response = http.getString();
-    // response = "{\"access_token\":\"abcde\"}";
-    // Serial.printf("allocating jsonBuffer<10>\n");
-    StaticJsonBuffer<3100> jsonBuffer;
-    // StaticJsonBuffer<100> jsonBuffer;
-    // Serial.printf("calling parseObject\n");
-    JsonObject& root = jsonBuffer.parseObject(response);
-    // Serial.printf("retrieving access_token\n");
-    const char *token = root["access_token"];
-    // Serial.printf("token = %s\n", token);
-    // Serial.printf("Creating oauthToken\n");
-    oauthToken = "Bearer " + String(token);
-    // Serial.printf("oauthToken = %s\n", oauthToken.c_str());
-  } else {
-    Serial.printf("%s: Error getting auth token, returnCode = %d\n", __func__, returnCode);
+    debug_print("Error posting sensor data, returnCode = %d\n", sensorPostReturnValue);
   }
 }
 
@@ -337,39 +456,63 @@ void getAuthToken() {
 
 double getFillPercentage() {
 
-  long duration;
-  double distance;
+  unsigned long duration;
+  float distance;
   float percentage;
 
   // Drop the trigger pin low for 2 microseconds
 
-  digitalWrite(triggerPin, LOW);
+  digitalWrite(TRIGGER_PIN, LOW);
   delayMicroseconds(2);
 
   // Send a 10 microsecond burst (high) on the trigger pin
 
-  digitalWrite(triggerPin, HIGH);
+  digitalWrite(TRIGGER_PIN, HIGH);
   delayMicroseconds(10);
-  digitalWrite(triggerPin, LOW);
+  digitalWrite(TRIGGER_PIN, LOW);
 
   // Read the echo pin, which is the round trip time in microseconds.
 
-  duration = pulseIn(echoPin, HIGH);
+  duration = pulseIn(ECHO_PIN, HIGH);
 
   // Calculate the distance in mm.  This is half of the duration
   // divided by the speed of sound in microseconds.
 
-  distance = (duration / 2) / speedOfSound;
+  distance = (duration / 2.0) / speedOfSound;
   percentage = (100.00 - ((distance / heightOfColumn) * 100.0));
 
-  // Serial.printf("Distance: %f mm, %f%%\n", distance, percentage);
+  debug_print("Duration: %5.2lu\tDistance: %7.2f mm\t fillLevel: %3.2f%%\n", duration, distance, percentage);
 
   return(percentage);
 }
 
+void prgButtonPushed() {
+  restoreBoardToDefault = true;
+}
+
+void resetWiFiAndBoard() {
+  debug_print("Prg button pressed -- clearing the saved SSID/password information.\n");
+  WiFi.disconnect(true);
+  debug_print("Prg button pressed -- formatting the SPIFFS and writing a default config file.\n");
+  writeDefaultConfigFile(true);
+  ESP.restart();
+}
+
 void setup() {
     Serial.begin(115200);
-    delay(5000);
+    debug_print("Booting (10 seconds) ...\n");
+    delay(10000);
+
+    // Allow pressing the "Prg" button to reset the Wi-Fi information.  This reboots
+    // the board.
+
+    pinMode(PRG_PIN, INPUT);
+    attachInterrupt(digitalPinToInterrupt(PRG_PIN), prgButtonPushed, FALLING);
+
+    // Enable the HC-SR04 pins for the ultrasonic distance sensor.
+
+    pinMode(TRIGGER_PIN, OUTPUT); // Sets the trigPin as an Output
+    pinMode(ECHO_PIN, INPUT); // Sets the echoPin as an Input
 
     // Change the screen orientation and choose a small, good looking font.
     // Display the Wi-Fi setup screen.  This will be displayed until Wi-Fi
@@ -384,61 +527,24 @@ void setup() {
     // Retrieve custom parameters.  Do this before anything else, since we'll
     // need them to populate the WiFiManager portal page.
 
-    // Uncomment the line below to format the file system.  Best way to remove
-    // the configuration file(s) for testing.
-
-    // Serial.println(F("Formatting the SPIFFS."));
-    // SPIFFS.format();
-
     // Mount the filesystem.
 
     if (SPIFFS.begin()) {
 
-      Serial.printf("%s: Mounted the filesystem.", __func__);
-
-
-#ifdef WRITE_SAMPLE_FILE
-
-      // Write a test file.
-
-      DynamicJsonBuffer jsonBuffer;
-      JsonObject& json = jsonBuffer.createObject();
-      json[iots_endpoint_key] = iots_endpoint_value;
-      json[oauth_endpoint_key] = oauth_endpoint_value;
-      json[sensor_id_key] = sensor_id_value;
-      File configFile = SPIFFS.open(CONFIG_FILE, FILE_WRITE);
-      if (!configFile) {
-        Serial.printf("%s: write test file: Failed to open config file %s for writing.\n", __func__, CONFIG_FILE);
-      }
-
-      json.printTo(Serial);
-      Serial.println(); // No linefeed in above json.PrintTo(Serial)
-      json.printTo(configFile);
-      configFile.close();
-
-      // Get the file size and print it.
-
-      configFile = SPIFFS.open(CONFIG_FILE, FILE_READ);
-      size_t configFileSize = configFile.size();
-      Serial.printf("%s: write test file: Wrote config file.  File size is %d bytes.\n", __func__, configFileSize);
-      configFile.close();
-      Serial.printf("%s: write test file: Root level directory listing:", __func__);
-      listDir(SPIFFS, "/", 0);
-
-#endif // WRITE_SAMPLE_FILE
+      debug_print("Mounted the filesystem.\n");
 
       // Read the config file if it exists.
 
       if (SPIFFS.exists(CONFIG_FILE)) {
 
-        Serial.printf("%s: Opening the config file %s\n", __func__, CONFIG_FILE);
+        debug_print("Opening the config file %s.\n", CONFIG_FILE);
         File configFile = SPIFFS.open(CONFIG_FILE, "r");  // open for reading only
 
         if (configFile) {
 
-          Serial.printf("%s: Opened file successfully for reading.", __func__);
+          debug_print("Opened file successfully for reading.");
           size_t configFileSize = configFile.size();
-          Serial.printf("%s: File size is %d bytes.\n", __func__, configFileSize);
+          debug_print("File size is %d bytes.\n", configFileSize);
 
           // Allocate a buffer into which to read the whole file.
 
@@ -447,36 +553,43 @@ void setup() {
           // Read the file into the buffer.
 
           int bytesRead = configFile.readBytes(configBuffer, configFileSize);
-          Serial.printf("%s: Read %d bytes from the config file\n", __func__, bytesRead);
-          Serial.printf("%s: String length of contents: %d\n", __func__, strlen(configBuffer));
-          Serial.printf("%s: Contents: %s\n", __func__, configBuffer);
+          debug_print("Read %d bytes from the config file.\n", bytesRead);
+          debug_print("String length of contents: %d\n", strlen(configBuffer));
+          debug_print("Contents: %s\n", configBuffer);
           configBuffer[bytesRead] = '\0';
-          Serial.printf("%s: Contents (with null): %s\n", __func__, configBuffer);
+          debug_print("Contents (with null): %s\n", configBuffer);
 
           // Parse the buffer.
 
           DynamicJsonBuffer jsonBuffer;
           JsonObject& json = jsonBuffer.parseObject(configBuffer);
           json.printTo(Serial);
+          debug_simple_print("\n");
           if (json.success()) {
-            Serial.printf("\n%s: Successfully parsed json", __func__);
+            debug_print("Successfully parsed json.\n");
             strcpy(iots_endpoint_value, json[iots_endpoint_key]);
-            Serial.printf("%s: %s = %s\n", __func__, iots_endpoint_key, iots_endpoint_value);
+            debug_print("%s = %s\n", iots_endpoint_key, iots_endpoint_value);
             strcpy(oauth_endpoint_value, json[oauth_endpoint_key]);
-            Serial.printf("%s: %s = %s\n", __func__, oauth_endpoint_key, oauth_endpoint_value);
+            debug_print("%s = %s\n", oauth_endpoint_key, oauth_endpoint_value);
+            strcpy(oauth_client_id_value, json[oauth_client_id_key]);
+            debug_print("%s = %s\n", oauth_client_id_key, oauth_client_id_value);
+            strcpy(oauth_client_secret_value, json[oauth_client_secret_key]);
+            debug_print("%s = %s\n", oauth_client_secret_key, oauth_client_secret_value);
             strcpy(sensor_id_value, json[sensor_id_key]);
-            Serial.printf("%s: %s = %s\n", __func__, sensor_id_key, sensor_id_value);
+            debug_print("%s = %s\n", sensor_id_key, sensor_id_value);
           } else {
-            Serial.printf("%s: Failed to load json config.", __func__);
+            debug_print("Failed to load json config.");
           }
         } // Read the config file
 
       } else {
-        Serial.printf("%s: Config file %s does not exist.\n", __func__, CONFIG_FILE);
+        debug_print("Config file %s does not exist.\n", CONFIG_FILE);
       }
 
     } else {
-      Serial.printf("%s: Failed to mount SPIFFS!!!!!!", __func__);
+      // If we couldn't mount the SPIFFS, format the file system and write a default config file.
+      debug_print("Failed to mount SPIFFS!!!!!!");
+      writeDefaultConfigFile(true);
     }
 
     // Uncomment this line to erase saved settings.  Note that it does not get rid of
@@ -493,10 +606,14 @@ void setup() {
 
     WiFiManagerParameter custom_iots_endpoint_value("IoTS Endoint", "Custom IoTS Endpoint", iots_endpoint_value, IOTS_ENDPOINT_SIZE);
     WiFiManagerParameter custom_oauth_endpoint_value("OAuth Endpoint", "Custom OAuth Endpoint", oauth_endpoint_value, OAUTH_ENDPOINT_SIZE);
+    WiFiManagerParameter custom_oauth_client_id_value("OAuth Client ID", "Custom OAuth Client ID", oauth_client_id_value, OAUTH_CLIENT_ID_SIZE);
+    WiFiManagerParameter custom_oauth_client_secret_value("OAuth Client Secret", "Custom OAuth Client Secret", oauth_client_secret_value, OAUTH_CLIENT_SECRET_SIZE);
     WiFiManagerParameter custom_sensor_id_value("Sensor ID", "Custom Sensor ID", sensor_id_value, SENSOR_ID_SIZE);
     wifiManager.setSaveConfigCallback(saveConfigCallback);
     wifiManager.addParameter(&custom_iots_endpoint_value);
     wifiManager.addParameter(&custom_oauth_endpoint_value);
+    wifiManager.addParameter(&custom_oauth_client_id_value);
+    wifiManager.addParameter(&custom_oauth_client_secret_value);
     wifiManager.addParameter(&custom_sensor_id_value);
 
     // Retrieve any stored SSIDs/passwords and try to connect to them.
@@ -516,7 +633,7 @@ void setup() {
     // We have connected to the Wi-Fi network.  Print some information and carry
     // on.
 
-    Serial.printf("%s: Connected to SSID %s, IP %s\n", __func__, WiFi.SSID().c_str(), wifiManager.toStringIp(WiFi.localIP()).c_str());
+    debug_print("Connected to SSID %s, IP %s\n", WiFi.SSID().c_str(), wifiManager.toStringIp(WiFi.localIP()).c_str());
 
     // Now that we're connected, display the new Wi-Fi and configuration information.
 
@@ -524,6 +641,8 @@ void setup() {
 
     strcpy(iots_endpoint_value, custom_iots_endpoint_value.getValue());
     strcpy(oauth_endpoint_value, custom_oauth_endpoint_value.getValue());
+    strcpy(oauth_client_id_value, custom_oauth_client_id_value.getValue());
+    strcpy(oauth_client_secret_value, custom_oauth_client_secret_value.getValue());
     strcpy(sensor_id_value, custom_sensor_id_value.getValue());
 
     // If we changed any paramater configuration, save it.
@@ -533,14 +652,18 @@ void setup() {
       JsonObject& json = jsonBuffer.createObject();
       json[iots_endpoint_key] = iots_endpoint_value;
       json[oauth_endpoint_key] = oauth_endpoint_value;
+      json[oauth_client_id_key] = oauth_client_id_value;
+      json[oauth_client_secret_key] = oauth_client_secret_value;
       json[sensor_id_key] = sensor_id_value;
       File configFile = SPIFFS.open(CONFIG_FILE, FILE_WRITE);
       if (!configFile) {
-        Serial.printf("%s: Failed to open config file %s for writing.\n", __func__, CONFIG_FILE);
+        debug_print("Failed to open config file %s for writing.\n", CONFIG_FILE);
       }
 
+#ifdef DEBUG
       json.printTo(Serial);
-      Serial.println(); // No linefeed in above json.PrintTo(Serial)
+      debug_simple_print("\n");
+#endif // DEBUG
       json.printTo(configFile);
       configFile.close();
 
@@ -548,9 +671,9 @@ void setup() {
 
       configFile = SPIFFS.open(CONFIG_FILE, FILE_READ);
       size_t configFileSize = configFile.size();
-      Serial.printf("%s: Wrote conig file.  File size is %d bytes.\n", __func__, configFileSize);
+      debug_print("Wrote conig file.  File size is %d bytes.\n", configFileSize);
       configFile.close();
-      Serial.printf("%s: Root level directory listing:", __func__);
+      debug_print("Root level directory listing:");
       listDir(SPIFFS, "/", 0);
 
     }
@@ -561,7 +684,7 @@ void setup() {
     // if you have successfully connected to a Wi-Fi network.
 
 #ifdef CLEAR_SAVED_WIFI_SETTINGS
-    Serial.printf("%s: Clearing the saved SSID/password information.", __func__);
+    debug_print("Clearing the saved SSID/password information.");
     WiFi.disconnect(true);
 #endif // CLEAR_SAVED_WIFI_SETTINGS
 
@@ -575,6 +698,10 @@ void setup() {
     delay(SECONDS_BETWEEN_SCREENS);
     drawOauthEndpointInformationFrame();
     delay(SECONDS_BETWEEN_SCREENS);
+    drawOauthClientIDInformationFrame();
+    delay(SECONDS_BETWEEN_SCREENS);
+    drawOauthClientSecretInformationFrame();
+    delay(SECONDS_BETWEEN_SCREENS);
     drawSensorIDInformationFrame();
     delay(SECONDS_BETWEEN_SCREENS);
   }
@@ -582,22 +709,24 @@ void setup() {
 }
 
 void loop() {
-    getAuthToken();
-    // Serial.printf("oauthToken: %s\n", oauthToken.c_str());
 
-    double levelPercentage = getFillPercentage();
-    double deltaValue = fabs(previousLevelPercentage - levelPercentage);
-    if (deltaValue > POST_LEVEL_DELTA || (forcePostCount >= MAX_SKIPPED_READINGS)) {
-      Serial.printf("%s: +++ posting: current = %f, previous = %f, delta = %f, forcePostCount = %d\n", __func__, levelPercentage, previousLevelPercentage, deltaValue, forcePostCount);
-      postLevelPercentage(levelPercentage);
-      previousLevelPercentage = levelPercentage;
-      forcePostCount = 1;
-    } else {
-      Serial.printf("%s: !!!!!! NOT posting: previous = %f, current = %f, delta = %f, forcePostCount = %d\n", __func__, previousLevelPercentage, levelPercentage, deltaValue, forcePostCount);
-      forcePostCount++;
-    }
-    // postLevelPercentage(33.48);
-  Serial.printf("%s: Displaying sensor information frame.\n", __func__);
+  if (restoreBoardToDefault) {
+    resetWiFiAndBoard();
+  }
+
+  double levelPercentage = getFillPercentage();
+  double deltaValue = fabs(previousLevelPercentage - levelPercentage);
+  if (deltaValue > POST_LEVEL_DELTA || (forcePostCount >= MAX_SKIPPED_READINGS)) {
+    debug_print("+++ posting: current = %f, previous = %f, delta = %f, forcePostCount = %d\n", levelPercentage, previousLevelPercentage, deltaValue, forcePostCount);
+    postLevelPercentage(levelPercentage);
+    previousLevelPercentage = levelPercentage;
+    forcePostCount = 1;
+  } else {
+    debug_print("!!!!!! NOT posting: previous = %f, current = %f, delta = %f, forcePostCount = %d\n", previousLevelPercentage, levelPercentage, deltaValue, forcePostCount);
+    forcePostCount++;
+  }
+  // postLevelPercentage(33.48);
+  debug_print("Displaying sensor information frame.\n");
   drawSensorInformationFrame();
   delay(POST_INTERVAL_SECONDS);
 }
