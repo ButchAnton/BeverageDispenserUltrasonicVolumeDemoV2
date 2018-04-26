@@ -493,9 +493,9 @@ void prgButtonPushed() {
 }
 
 void resetWiFiAndBoard() {
-  debug_print("Prg button pressed -- clearing the saved SSID/password information.\n");
+  debug_print("Prg button pressed -- resetting board to default state.\n");
+  debug_print("Clearing stored Wi-Fi information.\n");
   WiFi.disconnect(true);
-  debug_print("Prg button pressed -- formatting the SPIFFS and writing a default config file.\n");
   writeDefaultConfigFile(true);
   ESP.restart();
 }
