@@ -115,7 +115,7 @@ bool needToSaveConfiguration = false;
 
 void saveConfigCallback() {
   needToSaveConfiguration = true;
-  debug_print("callback called: needToSaveConfiguration set to true.");
+  debug_print("callback called: needToSaveConfiguration set to true.\n");
 }
 
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
@@ -135,16 +135,15 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
 
   File file = root.openNextFile();
   while (file) {
+    filename = (char *)file.name();
     if (file.isDirectory()) {
       debug_simple_print("  DIR : ");
-      filename = (char *)file.name();
       debug_simple_print("%s\n", filename);
       if (levels) {
         listDir(fs, filename, levels - 1);
       }
     } else {
       debug_simple_print("  FILE: ");
-      // Serial.print(file.name());
       debug_simple_print("%s", filename);
       int filesize = file.size();
       debug_simple_print("  SIZE: ");
@@ -156,7 +155,10 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
 
 void writeDefaultConfigFile(bool shouldFormat) {
 
+  debug_print("Writing default config file.\n");
+
   if (shouldFormat) {
+    debug_print("Formatting SPIFFS.\n");
     SPIFFS.format();
   }
 
@@ -588,7 +590,7 @@ void setup() {
 
     } else {
       // If we couldn't mount the SPIFFS, format the file system and write a default config file.
-      debug_print("Failed to mount SPIFFS!!!!!!");
+      debug_print("Failed to mount SPIFFS!!!!!!\n");
       writeDefaultConfigFile(true);
     }
 
@@ -673,7 +675,7 @@ void setup() {
       size_t configFileSize = configFile.size();
       debug_print("Wrote conig file.  File size is %d bytes.\n", configFileSize);
       configFile.close();
-      debug_print("Root level directory listing:");
+      debug_print("Root level directory listing:\n");
       listDir(SPIFFS, "/", 0);
 
     }
