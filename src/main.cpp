@@ -59,7 +59,6 @@
 
 // POST default values and time between POSTs.
 
-float fill_percentage = -99.9999999;
 int sensorPostReturnValue = 202;
 #define POST_INTERVAL_SECONDS (20)
 
@@ -83,7 +82,9 @@ bool restoreBoardToDefault = false;
 
 const double speedOfSound = 2.93866995797702; // mm per microsecond
 const double heightOfColumn = 573.388650;  // height of the beverage dispenser in mm
+double levelPercentage = -100.00;
 double previousLevelPercentage = 0.00;
+double deltaValue = 0.00;
 #define POST_LEVEL_DELTA (0.5)
 int forcePostCount = 1;
 #define MAX_SKIPPED_READINGS (6)
@@ -346,8 +347,7 @@ void drawSensorInformationFrame() {
   debug_print("Displaying frame.\n");
   display.clear();
   display.drawStringMaxWidth(0, LINE_SPACING(0), 128, formatted_time);
-  char fill_percentage_string[128];
-  String sensorString = "Fill %: " + String(dtostrf(fill_percentage, 4, 2, fill_percentage_string)) + "%";
+  String sensorString = "Fill %: " + String(levelPercentage) + "%";
   display.drawStringMaxWidth(0, LINE_SPACING(1), 128, sensorString);
   String postString = "POST returns: " + String(sensorPostReturnValue);
   display.drawStringMaxWidth(0, LINE_SPACING(2), 128, postString);
@@ -674,7 +674,7 @@ void setup() {
 
       configFile = SPIFFS.open(CONFIG_FILE, FILE_READ);
       size_t configFileSize = configFile.size();
-      debug_print("Wrote conig file.  File size is %d bytes.\n", configFileSize);
+      debug_print("Wrote config file.  File size is %d bytes.\n", configFileSize);
       configFile.close();
       debug_print("Root level directory listing:\n");
       listDir(SPIFFS, "/", 0);
@@ -717,8 +717,8 @@ void loop() {
     resetWiFiAndBoard();
   }
 
-  double levelPercentage = getFillPercentage();
-  double deltaValue = fabs(previousLevelPercentage - levelPercentage);
+  levelPercentage = getFillPercentage();
+  deltaValue = fabs(previousLevelPercentage - levelPercentage);
   if (deltaValue > POST_LEVEL_DELTA || (forcePostCount >= MAX_SKIPPED_READINGS)) {
     debug_print("+++ posting: current = %f, previous = %f, delta = %f, forcePostCount = %d\n", levelPercentage, previousLevelPercentage, deltaValue, forcePostCount);
     postLevelPercentage(levelPercentage);
