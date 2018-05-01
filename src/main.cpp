@@ -443,7 +443,7 @@ void postLevelPercentage(float levelPercentage) {
   String request = "{\"messages\":[{\"cng_deviceId\":\"" + String(sensor_id_value) + "\",\"timestamp\":\"" + formatted_time + "\",\"filllevel\":" + levelPercentage + ",\"expiryDate\":\"10/10/2022\",\"messagetype\":700,\"filltype\":1,\"fragrance\":\"Ginger\"}]}";
 
   debug_print("Oauth token: <BEGIN TOKEN>%s<END TOKEN>, length = %d\n", oauthToken.c_str(), oauthToken.length());
-  debug_print("Request: %s\n", request.c_str());
+  debug_print("Host: %s Request: %s\n", iots_endpoint_value, request.c_str());
   sensorPostReturnValue = http.POST(request);
   if (sensorPostReturnValue == HTTP_CODE_OK || sensorPostReturnValue == HTTP_CODE_ACCEPTED) {
     response = http.getString();
