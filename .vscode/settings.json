@@ -1,0 +1,6 @@
+{
+    "terminal.integrated.env.osx": {
+        "PATH": "/Users/butch/.platformio/penv/bin:/Users/butch/.platformio/penv:/Users/butch/.rvm/gems/ruby-2.4.1/bin:/Users/butch/.rvm/gems/ruby-2.4.1@global/bin:/Users/butch/.rvm/rubies/ruby-2.4.1/bin:/usr/local/share/python:/usr/local/git/bin:/usr/local/bin:/usr/local/sbin:/usr/local/mysql/bin:/usr/bin/X11:/usr/local/bin/X11:/Users/butch/bin:/opt/local/bin:/opt/xindice/bin:/opt/local/lib/postgresql84/bin:/usr/bin:/bin:/usr/contrib/bin:/sbin:/usr/sbin:/usr/lib:/usr/ucb:/usr/etc:/etc:~/.pyenv/bin/:/usr/local/opt/go/libexec/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/X11/bin:/usr/local/share/dotnet:/usr/local/git/bin:/usr/local/MacGPG2/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Applications/Wireshark.app/Contents/MacOS:.:/Users/butch/.platformio/penv/bin:/Users/butch/src/esp_toolchain/xtensa-esp32-elf/bin:/usr/local/heroku/bin:/Users/butch/.rvm/bin:/usr/local/opt/fzf/bin",
+        "PLATFORMIO_CALLER": "vscode"
+    }
+}

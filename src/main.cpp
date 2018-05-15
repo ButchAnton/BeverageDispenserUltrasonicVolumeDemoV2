@@ -10,9 +10,22 @@
 // NOTE!!!!!!!
 // Before you ship the board (or, even better, when you first flash the board), make sure
 // that you uncomment the define below so that the SPIFFS gets formatted and a default
-// config file gets written.
+// config file gets written.  This is the safest way to do things.  If you forget,
+// the code should write one for you when it doesn't find one, but it's better
+// not to rely on it.
 
 // #define WRITE_SAMPLE_FILE 1
+
+//  These define the application to which the code is applicable.  Undefine
+// ONLY ONE of these.  Alternately, you can pass a -D flag on the compile
+// line to define ONLY ONE of these.
+// For example, -DLEONARDO_CENTERS=1
+// If you're using PlatformIO, you can add this define to the build_flags
+// section of platformio.ini.  This is the preferred way, since the code
+// will fail to compile if nothing is set in platformio.ini.
+
+// #define GOLDEN_DEMO 1
+// #define LEONARDO_CENTERS 1
 
 // Debug printing
 
@@ -96,20 +109,37 @@ int forcePostCount = 1;
 
 #define CONFIG_FILE "/config.json"
 #define IOTS_ENDPOINT_SIZE 256
-const char *iots_endpoint_key = "iots_endpoint";
-char iots_endpoint_value[IOTS_ENDPOINT_SIZE] = "https://sap-connected-goods-ingestion-api-demo-cdemo.cfapps.eu10.hana.ondemand.com/ConnectedGoods/v1/DeviceData";
 #define OAUTH_ENDPOINT_SIZE 256
-const char *oauth_endpoint_key = "oauth_endpoint";
-char oauth_endpoint_value[OAUTH_ENDPOINT_SIZE] = "https://cng-leonardoc.authentication.eu10.hana.ondemand.com/oauth/token";
 #define OAUTH_CLIENT_ID_SIZE 128
-const char *oauth_client_id_key = "oauth_client_id";
-char oauth_client_id_value[OAUTH_CLIENT_ID_SIZE] = "sb-sap-connected-goods-cust-demo!t5";
 #define OAUTH_CLIENT_SECRET_SIZE 128
-const char *oauth_client_secret_key = "oauth_client_secret";
-char oauth_client_secret_value[OAUTH_CLIENT_SECRET_SIZE] = "bc%2B1Zrm4%2Bc%2FZUuD0TXUUTxP5F0k%3D";
 #define SENSOR_ID_SIZE 128
+
+#ifdef LEONARDO_CENTERS
+#define IOTS_ENDPOINT_DEFAULT_VALUE "https://sap-connected-goods-ingestion-api-demo-cdemo.cfapps.eu10.hana.ondemand.com/ConnectedGoods/v1/DeviceData"
+#define OAUTH_ENDPOINT_DEFAULT_VALUE "https://cng-leonardoc.authentication.eu10.hana.ondemand.com/oauth/token"
+#define OAUTH_CLIENT_ID_DEFAULT_VALUE "sb-sap-connected-goods-cust-demo!t5"
+#define OAUTH_CLIENT_SECRET_DEFAULT_VALUE "bc%2B1Zrm4%2Bc%2FZUuD0TXUUTxP5F0k%3D"
+#define SENSOR_ID_DEFAULT_VALUE "SENSOR_1"
+#endif // LEONARDO_CENTERS
+
+#ifdef GOLDEN_DEMO
+#define IOTS_ENDPOINT_DEFAULT_VALUE "https://sap-connected-goods-ingestion-api-qa.cfapps.eu10.hana.ondemand.com/ConnectedGoods/v1/DeviceData"
+#define OAUTH_ENDPOINT_DEFAULT_VALUE "https://cng-qa1.authentication.eu10.hana.ondemand.com/oauth/token"
+#define OAUTH_CLIENT_ID_DEFAULT_VALUE "sb-sap-connected-goods-qa!t5"
+#define OAUTH_CLIENT_SECRET_DEFAULT_VALUE "Eu7gZ7suJG4VRahheB2i3F2E85E="
+#define SENSOR_ID_DEFAULT_VALUE "LIVE_SILO_01"
+#endif // GOLDEN_DEMO
+
+const char *iots_endpoint_key = "iots_endpoint";
+char iots_endpoint_value[IOTS_ENDPOINT_SIZE] = IOTS_ENDPOINT_DEFAULT_VALUE;
+const char *oauth_endpoint_key = "oauth_endpoint";
+char oauth_endpoint_value[OAUTH_ENDPOINT_SIZE] = OAUTH_ENDPOINT_DEFAULT_VALUE;
+const char *oauth_client_id_key = "oauth_client_id";
+char oauth_client_id_value[OAUTH_CLIENT_ID_SIZE] = OAUTH_CLIENT_ID_DEFAULT_VALUE;
+const char *oauth_client_secret_key = "oauth_client_secret";
+char oauth_client_secret_value[OAUTH_CLIENT_SECRET_SIZE] = OAUTH_CLIENT_SECRET_DEFAULT_VALUE;
 const char *sensor_id_key = "sensor_id";
-char sensor_id_value[SENSOR_ID_SIZE] = "SENSOR_1";
+char sensor_id_value[SENSOR_ID_SIZE] = SENSOR_ID_DEFAULT_VALUE;
 bool needToSaveConfiguration = false;
 
 // Callback that gets triggered when configuration parameters are changed.
@@ -434,13 +464,60 @@ void postLevelPercentage(float levelPercentage) {
 
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Authorization", oauthToken);
-  http.addHeader("cng_devicetype", "Container");
-  http.addHeader("cng_messagetype", "Container_Message_Data2");
 
   // {"messages": [{"cng_deviceId": "Live-Container-1","timestamp":"2018-01-11T20:54:58.437Z","filllevel": 12,"expiryDate": "10/12/2022","messagetype": 700,"filltype": 1,"fragrance": "Ginger"}]}
 
   // String request = "{\"messages\":[{\"cng_deviceId\":\"" + sensorID + "\",\"timestamp\":\"" + formatted_time + "\",\"flavour\":1,\"fillLevel\":" + levelPercentage + ",\"longitude\":" + longitude + ",\"latitude\":" + latitude + ",\"temperature\":18.1}]}";
+#ifdef LEONARDO_CENTERS
+  http.addHeader("cng_devicetype", "ConnectedSilos");
+  http.addHeader("cng_messagetype", "SILO_TIME_SERIES");
   String request = "{\"messages\":[{\"cng_deviceId\":\"" + String(sensor_id_value) + "\",\"timestamp\":\"" + formatted_time + "\",\"filllevel\":" + levelPercentage + ",\"expiryDate\":\"10/10/2022\",\"messagetype\":700,\"filltype\":1,\"fragrance\":\"Ginger\"}]}";
+#endif // LEONARDO_CENTERS
+
+#if 0
+Below are the relevant details for our setup.
+
+Application URL: https://cng-qa1-ingqa.ing-sap.cfapps.eu10.hana.ondemand.com/
+AUTH URL : httphttps://cng-qa1-ingqa.ing-sap.cfapps.eu10.hana.ondemand.com/oauth/token
+"clientid": "sb-sap-connected-goods-qa!t5",
+"clientsecret": "Eu7gZ7suJG4VRahheB2i3F2E85E=",
+
+Device Data Post URL : https://sap-connected-goods-ingestion-api-qa.cfapps.eu10.hana.ondemand.com/ConnectedGoods/v1/DeviceData
+
+Headers
+cng_devicetype: ConnectedSilos
+cng_messagetype: SILO_TIME_SERIES
+
+Payload
+{  "messages":
+[
+{
+"cng_deviceId":”LIVE_SILO_01”,
+"timestamp": "2018-01-11T20:54:58.437Z",
+"fillLevelTons":  2,        ( Liters- From the sensor)
+"longitude": à @Caswell, Bob could provide this.,
+"temperature": From sensor ,
+"content": inputs from @Caswell, Bob
+"latitude": @Caswell, Bob could provide this.,
+"fillLevel": this has to be calculated as a percentage – fillLevelTons * 100 / 3 = 2 *100 / 3 = 66.66
+"humidity": Can be any value.
+
+}
+]
+}
+#endif // 0
+
+#ifdef GOLDEN_DEMO
+#define TANK_CAPACITY (3.3) // liters
+#define SCCC_LATITUDE "37.4046706"
+#define SCCC_LONGITUDE "-121.9774409"
+#define CONTENT "Beer"
+#define TEMPERATURE "5.0"
+#define RELATIVE_HUMIDITY "35.5"
+  http.addHeader("cng_devicetype", "ConnectedSilos");
+  http.addHeader("cng_messagetype", "SILO_TIME_SERIES");
+  String request = "{\"messages\":[{\"cng_deviceId\":\"" + String(sensor_id_value) + "\",\"longitude\":\"" + String(SCCC_LONGITUDE) + "\",\"latitude\":\"" + String(SCCC_LATITUDE) + "\",\"content\":\"" + String(CONTENT) + "\",\"temperature\":\"" + String(TEMPERATURE) + "\",\"humidity\":\"" + String(RELATIVE_HUMIDITY) + "\",\"timestamp\":\"" + formatted_time + "\",\"fillLevel\":" + levelPercentage + ",\"fillLevelTons\":" + (levelPercentage * TANK_CAPACITY / 100.0) + "}]}";
+#endif // LEONARDO_CENTERS
 
   debug_print("Oauth token: <BEGIN TOKEN>%s<END TOKEN>, length = %d\n", oauthToken.c_str(), oauthToken.length());
   debug_print("Host: %s Request: %s\n", iots_endpoint_value, request.c_str());
@@ -506,6 +583,20 @@ void setup() {
     debug_print("Booting (10 seconds) ...\n");
     delay(10000);
 
+#ifdef GOLDEN_DEMO
+  debug_print("Using GOLDEN_DEMO\n");
+#endif // GOLDEN_DEMO
+
+#ifdef LEONARDO_CENTERS
+  debug_print("Using LEONARDO_CENTERS\n");
+#endif // LEONARDO_CENTERS
+
+#ifdef WRITE_SAMPLE_FILE
+  writeDefaultConfigFile(true);
+  debug_print("Recompile the code, turning off the WRITE_SAMPLE_FILE flag.\n");
+  while (true) {;}
+#endif // WRITE_SAMPLE_FILE
+
     // Allow pressing the "Prg" button to reset the Wi-Fi information.  This reboots
     // the board.
 
@@ -514,8 +605,8 @@ void setup() {
 
     // Enable the HC-SR04 pins for the ultrasonic distance sensor.
 
-    pinMode(TRIGGER_PIN, OUTPUT); // Sets the trigPin as an Output
-    pinMode(ECHO_PIN, INPUT); // Sets the echoPin as an Input
+    pinMode(TRIGGER_PIN, OUTPUT); // Sets the trigger pin as an output.
+    pinMode(ECHO_PIN, INPUT); // Sets the echo pin as an input.
 
     // Change the screen orientation and choose a small, good looking font.
     // Display the Wi-Fi setup screen.  This will be displayed until Wi-Fi
