@@ -437,6 +437,14 @@ void getAuthToken() {
 // Post the level of the beverage dispenser to CNG as a percentage of full.
 
 void postLevelPercentage(float levelPercentage) {
+
+  // Right off the bat, if the level percentage is less than zero, throw it away.
+
+  if (levelPercentage < 0.0) {
+    debug_print("levelPercentage less than zero -- ignoring.\n");
+    return;
+  }
+
   HTTPClient http;
 
   String response = "";
@@ -473,39 +481,6 @@ void postLevelPercentage(float levelPercentage) {
   http.addHeader("cng_messagetype", "SILO_TIME_SERIES");
   String request = "{\"messages\":[{\"cng_deviceId\":\"" + String(sensor_id_value) + "\",\"timestamp\":\"" + formatted_time + "\",\"filllevel\":" + levelPercentage + ",\"expiryDate\":\"10/10/2022\",\"messagetype\":700,\"filltype\":1,\"fragrance\":\"Ginger\"}]}";
 #endif // LEONARDO_CENTERS
-
-#if 0
-Below are the relevant details for our setup.
-
-Application URL: https://cng-qa1-ingqa.ing-sap.cfapps.eu10.hana.ondemand.com/
-AUTH URL : httphttps://cng-qa1-ingqa.ing-sap.cfapps.eu10.hana.ondemand.com/oauth/token
-"clientid": "sb-sap-connected-goods-qa!t5",
-"clientsecret": "Eu7gZ7suJG4VRahheB2i3F2E85E=",
-
-Device Data Post URL : https://sap-connected-goods-ingestion-api-qa.cfapps.eu10.hana.ondemand.com/ConnectedGoods/v1/DeviceData
-
-Headers
-cng_devicetype: ConnectedSilos
-cng_messagetype: SILO_TIME_SERIES
-
-Payload
-{  "messages":
-[
-{
-"cng_deviceId":”LIVE_SILO_01”,
-"timestamp": "2018-01-11T20:54:58.437Z",
-"fillLevelTons":  2,        ( Liters- From the sensor)
-"longitude": à @Caswell, Bob could provide this.,
-"temperature": From sensor ,
-"content": inputs from @Caswell, Bob
-"latitude": @Caswell, Bob could provide this.,
-"fillLevel": this has to be calculated as a percentage – fillLevelTons * 100 / 3 = 2 *100 / 3 = 66.66
-"humidity": Can be any value.
-
-}
-]
-}
-#endif // 0
 
 #ifdef GOLDEN_DEMO
 #define TANK_CAPACITY (3.3) // liters
