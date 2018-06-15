@@ -73,7 +73,7 @@
 // POST default values and time between POSTs.
 
 int sensorPostReturnValue = 202;
-#define POST_INTERVAL_SECONDS (20)
+#define POST_INTERVAL_SECONDS (10 * 1000)   // Delay between posts in milliseconds
 
 // Initialize the WiFiManager.  This library provides a captive portal for configuring
 // Wi-Fi connective on the device, as well as on-device configuration and storage of
